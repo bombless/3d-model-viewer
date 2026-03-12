@@ -49,6 +49,44 @@
       animation: panel-enter 360ms ease-out;
     }
 
+    .panel-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .panel-head-left {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .panel.collapsed {
+      width: min(380px, calc(100% - 32px));
+    }
+
+    .panel.collapsed .subtitle,
+    .panel.collapsed .hint,
+    .panel.collapsed #panelBody {
+      display: none;
+    }
+
+    .btn-ghost {
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 10px;
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.06);
+      padding: 8px 10px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 140ms ease, filter 140ms ease;
+      white-space: nowrap;
+    }
+
+    .btn-ghost:hover { filter: brightness(1.06); transform: translateY(-1px); }
+    .btn-ghost:active { transform: translateY(0); }
+
     @keyframes panel-enter {
       from { transform: translateY(-10px); opacity: 0; }
       to { transform: translateY(0); opacity: 1; }
@@ -211,11 +249,17 @@
 <body>
   <div id="app"></div>
 
-  <div class="panel">
-    <h1 class="title">Three.js 模型查看器</h1>
-    <p class="subtitle">支持 <code>.glb/.gltf/.pmx</code>。默认路径已指向你导出的带动作 GLB 模型。</p>
+  <div id="panel" class="panel">
+    <div class="panel-head">
+      <div class="panel-head-left">
+        <h1 class="title">Three.js 模型查看器</h1>
+        <p class="subtitle">支持 <code>.glb/.gltf/.pmx</code>。默认路径已指向你导出的带动作 GLB 模型。</p>
+      </div>
+      <button id="togglePanel" class="btn-ghost" title="收起/展开面板">收起</button>
+    </div>
 
-    <div class="row scheme-row">
+    <div id="panelBody">
+      <div class="row scheme-row">
       <div class="scheme-group">
         <label class="scheme-item">
           <input type="radio" name="loadScheme" value="pmx" />
@@ -248,6 +292,7 @@
     </div>
 
     <div class="hint">操作：左键旋转，滚轮缩放，右键平移</div>
+    </div>
   </div>
 
   <script type="importmap">
@@ -267,6 +312,8 @@
     import { MMDLoader } from 'three/addons/loaders/MMDLoader.js';
 
     const app = document.getElementById('app');
+    const panelEl = document.getElementById('panel');
+    const togglePanelBtn = document.getElementById('togglePanel');
     const statusEl = document.getElementById('status');
     const modelPathInput = document.getElementById('modelPath');
     const loadByPathBtn = document.getElementById('loadByPath');
@@ -566,6 +613,25 @@
         }
       );
     }
+
+    function setPanelCollapsed(collapsed) {
+      if (!panelEl) return;
+      panelEl.classList.toggle('collapsed', collapsed);
+      if (togglePanelBtn) togglePanelBtn.textContent = collapsed ? '展开' : '收起';
+      try {
+        localStorage.setItem('panelCollapsed', collapsed ? '1' : '0');
+      } catch {}
+    }
+
+    // restore
+    try {
+      setPanelCollapsed(localStorage.getItem('panelCollapsed') === '1');
+    } catch {}
+
+    togglePanelBtn?.addEventListener('click', () => {
+      const collapsed = panelEl?.classList.contains('collapsed');
+      setPanelCollapsed(!collapsed);
+    });
 
     loadByPathBtn.addEventListener('click', () => loadFromPath(modelPathInput.value.trim(), false));
     reloadModelBtn?.addEventListener('click', () => loadFromPath(modelPathInput.value.trim(), true));
