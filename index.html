@@ -195,7 +195,7 @@
     </div>
 
     <div class="row">
-      <input id="modelPath" class="path-input" type="text" value="/models/paimeng_dance.glb" />
+      <input id="modelPath" class="path-input" type="text" value="models/paimeng_dance.glb" />
       <button id="loadByPath" class="btn">按路径加载</button>
     </div>
 
@@ -283,8 +283,8 @@
 
     const clock = new THREE.Clock();
     const presetPaths = {
-      pmx: '/models/paimeng.pmx',
-      glb: '/models/paimeng_dance.glb',
+      pmx: 'models/paimeng.pmx',
+      glb: 'models/paimeng_dance.glb',
     };
     let mixer = null;
     let currentRoot = null;
@@ -371,30 +371,43 @@
       setStatus(`加载失败: ${fromText}。请确认文件路径、后缀和纹理是否完整。`, true);
     }
 
+    function normalizeModelPath(path) {
+      if (!path) return path;
+      // GitHub Pages 仓库页通常在 /<repo>/ 下，避免写成站点根绝对路径。
+      return path.replace(/^\/+models\//i, 'models/');
+    }
+
     function loadFromPath(path) {
-      if (!path) {
+      const normalizedPath = normalizeModelPath(path.trim());
+      if (!normalizedPath) {
         setStatus('路径为空，请输入模型路径。', true);
         return;
       }
+      if (path !== normalizedPath) modelPathInput.value = normalizedPath;
       if (currentObjectURL) {
         URL.revokeObjectURL(currentObjectURL);
         currentObjectURL = null;
       }
-      setStatus(`正在加载: ${path}`);
-      const lowerPath = path.toLowerCase();
+      setStatus(`正在加载: ${normalizedPath}`);
+      const lowerPath = normalizedPath.toLowerCase();
       if (lowerPath.endsWith('.pmx')) {
-        mmdLoader.load(path, (mesh) => onLoaded(mesh, [], path), undefined, (err) => onLoadError(err, path));
+        mmdLoader.load(
+          normalizedPath,
+          (mesh) => onLoaded(mesh, [], normalizedPath),
+          undefined,
+          (err) => onLoadError(err, normalizedPath)
+        );
         return;
       }
       loader.load(
-        path,
+        normalizedPath,
         (gltf) => {
           const removed = stripKnownHelperMeshes(gltf.scene);
-          onLoaded(gltf.scene, gltf.animations, path);
-          if (removed > 0) setStatus(`加载成功: ${path}（已过滤 ${removed} 个辅助网格）`);
+          onLoaded(gltf.scene, gltf.animations, normalizedPath);
+          if (removed > 0) setStatus(`加载成功: ${normalizedPath}（已过滤 ${removed} 个辅助网格）`);
         },
         undefined,
-        (err) => onLoadError(err, path)
+        (err) => onLoadError(err, normalizedPath)
       );
     }
 

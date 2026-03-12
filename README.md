@@ -23,14 +23,14 @@ python3 -m http.server 8787
 
 当前页面默认尝试加载：
 
-- `/models/paimeng_dance.glb`
+- `models/paimeng_dance.glb`
 
 ## 方案切换
 
 页面内置了两种方案开关：
 
-- `方案A: MMDLoader 直载 PMX` -> `/models/paimeng.pmx`
-- `方案B: Blender 转 GLB` -> `/models/paimeng_dance.glb`
+- `方案A: MMDLoader 直载 PMX` -> `models/paimeng.pmx`
+- `方案B: Blender 转 GLB` -> `models/paimeng_dance.glb`
 
 点击“切换方案并加载”即可立即切换测试。
 
@@ -48,6 +48,18 @@ python3 -m http.server 8787
 - 目录权限问题：如果模型在你当前用户无读权限的目录，浏览器和本地服务都无法读取。
 - `.gltf` 纹理丢失：确认 `.bin` 和贴图文件与 `.gltf` 的相对路径一致。
 - `.pmx` 贴图丢失：确认 PMX 引用的纹理路径与 `Texture/` 目录一致，并保持原始目录结构。
+
+## GitHub Pages 部署
+
+本项目已兼容 `https://<user>.github.io/<repo>/` 子路径部署。
+
+1. 推送仓库到 GitHub。
+2. 在仓库 `Settings -> Pages` 中将 Source 设为 `GitHub Actions`。
+3. 推送到 `main` 或 `master` 分支后，会自动触发部署。
+
+部署完成后访问：
+
+- `https://<user>.github.io/<repo>/`
 
 ## 本次已完成
 
