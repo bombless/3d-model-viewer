@@ -1,0 +1,451 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Genshin Model Viewer</title>
+  <style>
+    :root {
+      --bg-0: #091018;
+      --bg-1: #1a2d3d;
+      --panel-bg: rgba(10, 16, 24, 0.72);
+      --panel-border: rgba(255, 255, 255, 0.16);
+      --text-main: #f3f7fb;
+      --text-subtle: #bed0e0;
+      --accent: #7cd5ff;
+      --danger: #ff7d7d;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(circle at 20% 15%, #24415a, var(--bg-0) 55%),
+                  linear-gradient(160deg, var(--bg-1), var(--bg-0));
+      color: var(--text-main);
+      font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    #app {
+      position: fixed;
+      inset: 0;
+    }
+
+    .panel {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      width: min(560px, calc(100% - 32px));
+      padding: 14px;
+      border: 1px solid var(--panel-border);
+      border-radius: 14px;
+      background: var(--panel-bg);
+      backdrop-filter: blur(10px);
+      box-shadow: 0 14px 42px rgba(0, 0, 0, 0.28);
+      z-index: 10;
+      animation: panel-enter 360ms ease-out;
+    }
+
+    @keyframes panel-enter {
+      from { transform: translateY(-10px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .title {
+      margin: 0 0 4px;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.2px;
+    }
+
+    .subtitle {
+      margin: 0 0 12px;
+      font-size: 13px;
+      color: var(--text-subtle);
+      line-height: 1.45;
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .scheme-row {
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .scheme-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .scheme-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.04);
+      user-select: none;
+    }
+
+    .scheme-item input {
+      margin: 0;
+      accent-color: #6ccfff;
+    }
+
+    .path-input {
+      flex: 1;
+      min-width: 0;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-main);
+      padding: 9px 10px;
+      font-size: 14px;
+    }
+
+    .btn {
+      border: 1px solid rgba(124, 213, 255, 0.6);
+      border-radius: 10px;
+      color: #062637;
+      background: linear-gradient(180deg, #a4e6ff, var(--accent));
+      padding: 9px 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 140ms ease, filter 140ms ease;
+      white-space: nowrap;
+    }
+
+    .btn:hover { filter: brightness(1.06); transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+
+    .status {
+      margin-top: 4px;
+      font-size: 13px;
+      min-height: 20px;
+      color: var(--text-subtle);
+    }
+
+    .status.error { color: var(--danger); }
+
+    .hint {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--text-subtle);
+      opacity: 0.92;
+      line-height: 1.35;
+    }
+
+    .drop-zone {
+      margin-top: 8px;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px dashed rgba(255, 255, 255, 0.28);
+      font-size: 12px;
+      color: var(--text-subtle);
+      text-align: center;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .drop-zone.dragover {
+      border-color: var(--accent);
+      background: rgba(124, 213, 255, 0.12);
+      color: #dcf5ff;
+    }
+
+    @media (max-width: 680px) {
+      .row { flex-direction: column; }
+      .btn { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <div class="panel">
+    <h1 class="title">Three.js 模型查看器</h1>
+    <p class="subtitle">支持 <code>.glb/.gltf/.pmx</code>。默认路径已指向你导出的带动作 GLB 模型。</p>
+
+    <div class="row scheme-row">
+      <div class="scheme-group">
+        <label class="scheme-item">
+          <input type="radio" name="loadScheme" value="pmx" />
+          方案A: MMDLoader 直载 PMX
+        </label>
+        <label class="scheme-item">
+          <input type="radio" name="loadScheme" value="glb" checked />
+          方案B: Blender 转 GLB
+        </label>
+      </div>
+      <button id="switchScheme" class="btn">切换方案并加载</button>
+    </div>
+
+    <div class="row">
+      <input id="modelPath" class="path-input" type="text" value="/models/paimeng_dance.glb" />
+      <button id="loadByPath" class="btn">按路径加载</button>
+    </div>
+
+    <div class="row">
+      <input id="fileInput" class="path-input" type="file" accept=".glb,.gltf,.pmx" />
+    </div>
+
+    <div id="dropZone" class="drop-zone">也可以把 GLB/GLTF 拖到这里（PMX 推荐按路径加载）</div>
+    <div id="status" class="status">等待加载模型</div>
+    <div class="hint">操作：左键旋转，滚轮缩放，右键平移</div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+    import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+    import { MMDLoader } from 'three/addons/loaders/MMDLoader.js';
+
+    const app = document.getElementById('app');
+    const statusEl = document.getElementById('status');
+    const modelPathInput = document.getElementById('modelPath');
+    const loadByPathBtn = document.getElementById('loadByPath');
+    const switchSchemeBtn = document.getElementById('switchScheme');
+    const schemeInputs = document.querySelectorAll('input[name="loadScheme"]');
+    const fileInput = document.getElementById('fileInput');
+    const dropZone = document.getElementById('dropZone');
+
+    const scene = new THREE.Scene();
+    scene.background = null;
+
+    const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.01, 2000);
+    camera.position.set(0, 1.2, 3.4);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    app.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.target.set(0, 1.0, 0);
+
+    const hemi = new THREE.HemisphereLight(0xdff2ff, 0x13202e, 1.15);
+    scene.add(hemi);
+
+    const key = new THREE.DirectionalLight(0xffffff, 1.7);
+    key.position.set(4, 6, 3);
+    scene.add(key);
+
+    const rim = new THREE.DirectionalLight(0x8ad8ff, 0.9);
+    rim.position.set(-3, 3, -5);
+    scene.add(rim);
+
+    const floor = new THREE.Mesh(
+      new THREE.CircleGeometry(5, 64),
+      new THREE.MeshStandardMaterial({ color: 0x0d1722, roughness: 0.86, metalness: 0.06 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -0.001;
+    scene.add(floor);
+
+    const grid = new THREE.GridHelper(10, 20, 0x4f7fa0, 0x2b4357);
+    grid.material.opacity = 0.22;
+    grid.material.transparent = true;
+    scene.add(grid);
+
+    const loader = new GLTFLoader();
+    const dracoLoader = new DRACOLoader();
+    dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/libs/draco/');
+    loader.setDRACOLoader(dracoLoader);
+    const mmdLoader = new MMDLoader();
+
+    const clock = new THREE.Clock();
+    const presetPaths = {
+      pmx: '/models/paimeng.pmx',
+      glb: '/models/paimeng_dance.glb',
+    };
+    let mixer = null;
+    let currentRoot = null;
+    let currentObjectURL = null;
+
+    function setStatus(text, isError = false) {
+      statusEl.textContent = text;
+      statusEl.classList.toggle('error', isError);
+    }
+
+    function clearCurrentModel() {
+      if (!currentRoot) return;
+      scene.remove(currentRoot);
+      currentRoot.traverse((obj) => {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) {
+          if (Array.isArray(obj.material)) {
+            obj.material.forEach((m) => m.dispose());
+          } else {
+            obj.material.dispose();
+          }
+        }
+      });
+      currentRoot = null;
+      mixer = null;
+    }
+
+    function frameObject(root) {
+      const box = new THREE.Box3().setFromObject(root);
+      const size = box.getSize(new THREE.Vector3());
+      const center = box.getCenter(new THREE.Vector3());
+      root.position.sub(center);
+      root.position.y += size.y * 0.5;
+
+      const maxSide = Math.max(size.x, size.y, size.z);
+      const dist = Math.max(1.6, maxSide * 1.8);
+      camera.position.set(dist * 0.35, Math.max(1.0, size.y * 0.65), dist);
+      controls.target.set(0, Math.max(0.75, size.y * 0.5), 0);
+      controls.update();
+    }
+
+    function onLoaded(model, animations, fromText) {
+      clearCurrentModel();
+      currentRoot = model;
+      scene.add(currentRoot);
+      frameObject(currentRoot);
+
+      if (animations && animations.length > 0) {
+        mixer = new THREE.AnimationMixer(currentRoot);
+        animations.forEach((clip) => mixer.clipAction(clip).play());
+      }
+
+      setStatus(`加载成功: ${fromText}`);
+    }
+
+    function onLoadError(err, fromText) {
+      console.error(err);
+      setStatus(`加载失败: ${fromText}。请确认文件路径、后缀和纹理是否完整。`, true);
+    }
+
+    function loadFromPath(path) {
+      if (!path) {
+        setStatus('路径为空，请输入模型路径。', true);
+        return;
+      }
+      if (currentObjectURL) {
+        URL.revokeObjectURL(currentObjectURL);
+        currentObjectURL = null;
+      }
+      setStatus(`正在加载: ${path}`);
+      const lowerPath = path.toLowerCase();
+      if (lowerPath.endsWith('.pmx')) {
+        mmdLoader.load(path, (mesh) => onLoaded(mesh, [], path), undefined, (err) => onLoadError(err, path));
+        return;
+      }
+      loader.load(path, (gltf) => onLoaded(gltf.scene, gltf.animations, path), undefined, (err) => onLoadError(err, path));
+    }
+
+    function selectedScheme() {
+      const checked = Array.from(schemeInputs).find((item) => item.checked);
+      return checked?.value || 'glb';
+    }
+
+    function applyScheme(loadNow = true) {
+      const scheme = selectedScheme();
+      const path = presetPaths[scheme];
+      modelPathInput.value = path;
+      setStatus(`已切换到${scheme === 'pmx' ? '方案A (PMX)' : '方案B (GLB)'}: ${path}`);
+      if (loadNow) loadFromPath(path);
+    }
+
+    function loadFromFile(file) {
+      if (!file) return;
+      if (!/\.(glb|gltf|pmx)$/i.test(file.name)) {
+        setStatus('只支持 .glb / .gltf / .pmx 文件。', true);
+        return;
+      }
+      if (/\.pmx$/i.test(file.name)) {
+        setStatus('PMX 包含外部贴图时建议按路径加载，避免贴图丢失。', true);
+        return;
+      }
+      if (currentObjectURL) URL.revokeObjectURL(currentObjectURL);
+      currentObjectURL = URL.createObjectURL(file);
+      setStatus(`正在加载本地文件: ${file.name}`);
+      loader.load(
+        currentObjectURL,
+        (gltf) => onLoaded(gltf.scene, gltf.animations, file.name),
+        undefined,
+        (err) => onLoadError(err, file.name)
+      );
+    }
+
+    loadByPathBtn.addEventListener('click', () => loadFromPath(modelPathInput.value.trim()));
+    switchSchemeBtn.addEventListener('click', () => applyScheme(true));
+    schemeInputs.forEach((input) => {
+      input.addEventListener('change', () => applyScheme(false));
+    });
+
+    modelPathInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') loadFromPath(modelPathInput.value.trim());
+    });
+
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files?.[0];
+      loadFromFile(file);
+    });
+
+    ['dragenter', 'dragover'].forEach((type) => {
+      dropZone.addEventListener(type, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.add('dragover');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach((type) => {
+      dropZone.addEventListener(type, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        dropZone.classList.remove('dragover');
+      });
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+      const file = e.dataTransfer?.files?.[0];
+      loadFromFile(file);
+    });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    renderer.setAnimationLoop(() => {
+      controls.update();
+      if (mixer) mixer.update(clock.getDelta());
+      renderer.render(scene, camera);
+    });
+
+    loadFromPath(modelPathInput.value.trim());
+  </script>
+</body>
+</html>
