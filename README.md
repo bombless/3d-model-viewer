@@ -61,6 +61,20 @@ python3 -m http.server 8787
 
 - `https://<user>.github.io/<repo>/`
 
+## 导出脚本
+
+仓库内置了 MMD 风格材质转 GLB 导出脚本：
+
+- `scripts/export_mmd_textured_glb.py`
+
+示例：
+
+```bash
+blender -b -P scripts/export_mmd_textured_glb.py -- \
+  --input-blend /home/openclaw/paimeng/派蒙_跳舞动作.blend \
+  --output-glb /home/openclaw/paimeng/paimeng_dance_textured.glb
+```
+
 ## 本次已完成
 
 - 已从 `~/paimeng/派蒙.blend` 导出 `~/paimeng/paimeng.glb`
