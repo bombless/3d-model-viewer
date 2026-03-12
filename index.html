@@ -142,6 +142,41 @@
 
     .status.error { color: var(--danger); }
 
+    .progress-wrap {
+      margin-top: 10px;
+      display: none;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .progress-wrap.visible {
+      display: flex;
+    }
+
+    .progress-bar {
+      flex: 1;
+      height: 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.10);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      overflow: hidden;
+    }
+
+    .progress-bar > .fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, rgba(124, 213, 255, 0.20), rgba(124, 213, 255, 0.95));
+      transition: width 120ms ease;
+    }
+
+    .progress-text {
+      font-size: 12px;
+      color: var(--text-subtle);
+      min-width: 70px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
     .hint {
       margin-top: 6px;
       font-size: 12px;
@@ -197,6 +232,7 @@
     <div class="row">
       <input id="modelPath" class="path-input" type="text" value="models/paimeng_dance.glb" />
       <button id="loadByPath" class="btn">按路径加载</button>
+      <button id="reloadModel" class="btn" title="给模型 URL 加时间戳，绕过缓存">重载模型</button>
     </div>
 
     <div class="row">
@@ -205,6 +241,12 @@
 
     <div id="dropZone" class="drop-zone">也可以把 GLB/GLTF 拖到这里（PMX 推荐按路径加载）</div>
     <div id="status" class="status">等待加载模型</div>
+
+    <div id="progressWrap" class="progress-wrap" aria-label="加载进度">
+      <div class="progress-bar"><div id="progressFill" class="fill"></div></div>
+      <div id="progressText" class="progress-text">0%</div>
+    </div>
+
     <div class="hint">操作：左键旋转，滚轮缩放，右键平移</div>
   </div>
 
@@ -228,10 +270,15 @@
     const statusEl = document.getElementById('status');
     const modelPathInput = document.getElementById('modelPath');
     const loadByPathBtn = document.getElementById('loadByPath');
+    const reloadModelBtn = document.getElementById('reloadModel');
     const switchSchemeBtn = document.getElementById('switchScheme');
     const schemeInputs = document.querySelectorAll('input[name="loadScheme"]');
     const fileInput = document.getElementById('fileInput');
     const dropZone = document.getElementById('dropZone');
+
+    const progressWrap = document.getElementById('progressWrap');
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
 
     const scene = new THREE.Scene();
     scene.background = null;
@@ -289,6 +336,29 @@
     let mixer = null;
     let currentRoot = null;
     let currentObjectURL = null;
+
+    function showProgress() {
+      progressWrap?.classList.add('visible');
+    }
+
+    function hideProgress() {
+      progressWrap?.classList.remove('visible');
+    }
+
+    function setProgress(ratio01) {
+      const ratio = Number.isFinite(ratio01) ? Math.max(0, Math.min(1, ratio01)) : 0;
+      const pct = Math.round(ratio * 100);
+      if (progressFill) progressFill.style.width = `${pct}%`;
+      if (progressText) progressText.textContent = `${pct}%`;
+    }
+
+    function withCacheBusting(url) {
+      // 只对 http(s) / 相对路径做 cache-bust；blob: / data: 不处理。
+      // 形式按你的要求：在 URL 后面直接拼 "?时间戳"（若已有 query 则拼 "&时间戳"）。
+      if (!url || /^blob:|^data:/i.test(url)) return url;
+      const sep = url.includes('?') ? '&' : '?';
+      return `${url}${sep}${Date.now()}`;
+    }
 
     function setStatus(text, isError = false) {
       statusEl.textContent = text;
@@ -366,6 +436,8 @@
 
     function onLoadError(err, fromText) {
       console.error(err);
+      hideProgress();
+      setProgress(0);
       setStatus(`加载失败: ${fromText}。请确认文件路径、后缀和纹理是否完整。`, true);
     }
 
@@ -375,7 +447,7 @@
       return path.replace(/^\/+models\//i, 'models/');
     }
 
-    function loadFromPath(path) {
+    function loadFromPath(path, cacheBust = false) {
       const normalizedPath = normalizeModelPath(path.trim());
       if (!normalizedPath) {
         setStatus('路径为空，请输入模型路径。', true);
@@ -386,26 +458,56 @@
         URL.revokeObjectURL(currentObjectURL);
         currentObjectURL = null;
       }
-      setStatus(`正在加载: ${normalizedPath}`);
+
+      const requestUrl = cacheBust ? withCacheBusting(normalizedPath) : normalizedPath;
+      setStatus(`正在加载: ${normalizedPath}${cacheBust ? '（重载：已绕过缓存）' : ''}`);
+      showProgress();
+      setProgress(0);
+
+      const onProgress = (xhr) => {
+        const total = xhr?.total || 0;
+        const loaded = xhr?.loaded || 0;
+        if (total > 0) {
+          setProgress(loaded / total);
+          if (progressText) progressText.textContent = `${Math.round((loaded / total) * 100)}%`;
+        } else {
+          // 部分服务器不返回 Content-Length，这里显示不确定进度。
+          if (progressText) progressText.textContent = '...';
+        }
+      };
+
       const lowerPath = normalizedPath.toLowerCase();
       if (lowerPath.endsWith('.pmx')) {
         mmdLoader.load(
-          normalizedPath,
-          (mesh) => onLoaded(mesh, [], normalizedPath),
-          undefined,
-          (err) => onLoadError(err, normalizedPath)
+          requestUrl,
+          (mesh) => {
+            setProgress(1);
+            hideProgress();
+            onLoaded(mesh, [], normalizedPath);
+          },
+          onProgress,
+          (err) => {
+            hideProgress();
+            onLoadError(err, normalizedPath);
+          }
         );
         return;
       }
+
       loader.load(
-        normalizedPath,
+        requestUrl,
         (gltf) => {
           const removed = stripKnownHelperMeshes(gltf.scene);
+          setProgress(1);
+          hideProgress();
           onLoaded(gltf.scene, gltf.animations, normalizedPath);
           if (removed > 0) setStatus(`加载成功: ${normalizedPath}（已过滤 ${removed} 个辅助网格）`);
         },
-        undefined,
-        (err) => onLoadError(err, normalizedPath)
+        onProgress,
+        (err) => {
+          hideProgress();
+          onLoadError(err, normalizedPath);
+        }
       );
     }
 
@@ -419,7 +521,7 @@
       const path = presetPaths[scheme];
       modelPathInput.value = path;
       setStatus(`已切换到${scheme === 'pmx' ? '方案A (PMX)' : '方案B (GLB)'}: ${path}`);
-      if (loadNow) loadFromPath(path);
+      if (loadNow) loadFromPath(path, false);
     }
 
     function loadFromFile(file) {
@@ -435,26 +537,45 @@
       if (currentObjectURL) URL.revokeObjectURL(currentObjectURL);
       currentObjectURL = URL.createObjectURL(file);
       setStatus(`正在加载本地文件: ${file.name}`);
+      showProgress();
+      setProgress(0);
+
+      const onProgress = (xhr) => {
+        const total = xhr?.total || 0;
+        const loaded = xhr?.loaded || 0;
+        if (total > 0) {
+          setProgress(loaded / total);
+        } else {
+          if (progressText) progressText.textContent = '...';
+        }
+      };
+
       loader.load(
         currentObjectURL,
         (gltf) => {
           const removed = stripKnownHelperMeshes(gltf.scene);
+          setProgress(1);
+          hideProgress();
           onLoaded(gltf.scene, gltf.animations, file.name);
           if (removed > 0) setStatus(`加载成功: ${file.name}（已过滤 ${removed} 个辅助网格）`);
         },
-        undefined,
-        (err) => onLoadError(err, file.name)
+        onProgress,
+        (err) => {
+          hideProgress();
+          onLoadError(err, file.name);
+        }
       );
     }
 
-    loadByPathBtn.addEventListener('click', () => loadFromPath(modelPathInput.value.trim()));
+    loadByPathBtn.addEventListener('click', () => loadFromPath(modelPathInput.value.trim(), false));
+    reloadModelBtn?.addEventListener('click', () => loadFromPath(modelPathInput.value.trim(), true));
     switchSchemeBtn.addEventListener('click', () => applyScheme(true));
     schemeInputs.forEach((input) => {
       input.addEventListener('change', () => applyScheme(false));
     });
 
     modelPathInput.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') loadFromPath(modelPathInput.value.trim());
+      if (e.key === 'Enter') loadFromPath(modelPathInput.value.trim(), false);
     });
 
     fileInput.addEventListener('change', () => {
